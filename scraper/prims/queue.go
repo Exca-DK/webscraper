@@ -1,12 +1,12 @@
 package prims
 
-type queue[T any] []T
+type Queue[T any] []T
 
-func (q *queue[T]) push(elem T) {
+func (q *Queue[T]) Push(elem T) {
 	*q = append(*q, elem)
 }
 
-func (q *queue[T]) peek() (T, bool) {
+func (q *Queue[T]) Peek() (T, bool) {
 	var t T
 	if len(*q) == 0 {
 		return t, false
@@ -15,13 +15,13 @@ func (q *queue[T]) peek() (T, bool) {
 	return t, true
 }
 
-func (q *queue[T]) pop() (T, bool) {
-	elem, ok := q.peek()
+func (q *Queue[T]) Pop() (T, bool) {
+	elem, ok := q.Peek()
 	q.move()
 	return elem, ok
 }
 
-func (q *queue[T]) move() {
+func (q *Queue[T]) move() {
 	if len(*q) == 0 {
 		return
 	}

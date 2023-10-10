@@ -3,14 +3,14 @@ package prims
 import "testing"
 
 func TestQueue(t *testing.T) {
-	queue := new(queue[string])
-	queue.push("foo")
-	queue.push("bar")
-	queue.push("baz")
+	queue := new(Queue[string])
+	queue.Push("foo")
+	queue.Push("bar")
+	queue.Push("baz")
 
-	a, _ := queue.pop()
-	b, _ := queue.pop()
-	c, _ := queue.pop()
+	a, _ := queue.Pop()
+	b, _ := queue.Pop()
+	c, _ := queue.Pop()
 	if a != "foo" {
 		t.Fatalf("unexpected item. got %v, want %v", a, "foo")
 	}

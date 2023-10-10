@@ -19,14 +19,14 @@ func (i expirableItem[T]) String() string {
 
 type SimpleEvictableCache[T comparable, Y any] struct {
 	m          map[T]expirableItem[Y]
-	q          queue[expirableItem[T]]
+	q          Queue[expirableItem[T]]
 	onEviction func(T, Y)
 }
 
 func NewSimpleEvictableCache[T comparable, Y any](onEviction func(T, Y)) *SimpleEvictableCache[T, Y] {
 	return &SimpleEvictableCache[T, Y]{
 		m:          make(map[T]expirableItem[Y]),
-		q:          make(queue[expirableItem[T]], 0),
+		q:          make(Queue[expirableItem[T]], 0),
 		onEviction: onEviction,
 	}
 }
@@ -60,7 +60,7 @@ func (e *SimpleEvictableCache[T, Y]) Evict() {
 
 func (e *SimpleEvictableCache[T, Y]) tryEvict() {
 	for {
-		keyElem, ok := e.q.peek()
+		keyElem, ok := e.q.Peek()
 		if !ok {
 			return
 		}
@@ -69,7 +69,7 @@ func (e *SimpleEvictableCache[T, Y]) tryEvict() {
 			return
 		}
 
-		e.q.pop()
+		e.q.Pop()
 		valueElem := e.m[keyElem.V]
 		delete(e.m, keyElem.V)
 		e.evict(keyElem.V, valueElem.V)
@@ -83,7 +83,7 @@ func (e *SimpleEvictableCache[T, Y]) evict(k T, v Y) {
 }
 
 func (e *SimpleEvictableCache[T, Y]) mark(key T, deadline time.Time) {
-	e.q.push(expirableItem[T]{
+	e.q.Push(expirableItem[T]{
 		V:        key,
 		deadline: deadline,
 	})

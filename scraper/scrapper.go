@@ -34,8 +34,8 @@ type Scrapper struct {
 
 	// jobs that are running or yet to launch
 	// required in order to not scrape two same urls concurrently
-	pendingMu sync.Mutex
-	pending   map[string]struct{}
+	activeMu sync.Mutex
+	active   map[string]struct{}
 }
 
 func NewScrapper(analyzer analytics.Analyzer) *Scrapper {
@@ -54,7 +54,7 @@ func NewScrapper(analyzer analytics.Analyzer) *Scrapper {
 		maxDepth:  3,
 		pool:      workers.NewWorkPool(ch),
 		analyzer:  analyzer,
-		pending:   make(map[string]struct{}),
+		active:    make(map[string]struct{}),
 	}
 }
 
@@ -116,67 +116,98 @@ func (s *Scrapper) requestScrapes(targets []scrapeTarget) {
 }
 
 func (s *Scrapper) eventLoop() {
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
+
+	retryQueue := make(prims.Queue[scrapeTarget], 0)
 	cache := prims.NewSimpleEvictableCache[string, int](func(url string, depth int) {
-		// don't deadlock
-		go s.requestScrape(scrapeTarget{
-			url:   "",
-			depth: 0,
+		retryQueue.Push(scrapeTarget{
+			url:   url,
+			depth: depth,
 		})
 	})
+
+	var targets []scrapeTarget
 	for {
 		select {
 		case <-s.done:
 			// scrapper stopped
 			return
-		case targets := <-s.targetsCh:
-			for _, target := range targets {
-				// if already in cache, ignore.
-				// the loop will receive notification automatically when it expires
-				if cache.Seen(target.url) {
-					fmt.Println("ignoring seen url", "url", target.url, "depth", target.depth)
-					continue
-				}
-				if s.queueTarget(target, func() {
-					// clear pending
-					fmt.Println("removing job", "url", target.url, "depth", target.depth)
-					s.pendingMu.Lock()
-					defer s.pendingMu.Unlock()
-					delete(s.pending, target.url)
-				}) {
-					// only add to cache when job has been succesfully accepted by worker.
-					var deadline time.Time
-					if s.evictionRate != 0 {
-						deadline = time.Now().Add(s.evictionRate)
-					}
-					cache.AddIfNotSeen(target.url, target.depth, deadline)
-					fmt.Println("added url to scrape", "url", target.url, "depth", target.depth)
-				}
+		case req := <-s.targetsCh:
+			targets = append(targets, req...)
+		case <-ticker.C:
+			// try to add elems from failed queue
+			for target, ok := retryQueue.Pop(); ok; target, ok = retryQueue.Pop() {
+				targets = append(targets, target)
 			}
 		}
+		for _, target := range targets {
+			// if already in cache, ignore.
+			// the loop will receive notification automatically when it expires
+			if cache.Seen(target.url) {
+				continue
+			}
+			// not interested at all. ignore
+			if !s.canQueueTarget(target) {
+				continue
+			}
+			if !s.tryQueueTarget(target, func() {
+				// clear pending from job thread
+				s.activeMu.Lock()
+				delete(s.active, target.url)
+				s.activeMu.Unlock()
+			}) {
+				// add to retry and remove from active on failure
+				retryQueue.Push(target)
+				s.activeMu.Lock()
+				delete(s.active, target.url)
+				s.activeMu.Unlock()
+				continue
+			}
+
+			// only add to cache when job has been succesfully accepted by worker.
+			var deadline time.Time
+			if s.evictionRate != 0 {
+				deadline = time.Now().Add(s.evictionRate)
+			}
+			cache.AddIfNotSeen(target.url, target.depth, deadline)
+		}
+		// clear
+		targets = targets[len(targets):]
 	}
 }
 
-func (s *Scrapper) queueTarget(t scrapeTarget, callback func()) bool {
+func (s *Scrapper) canQueueTarget(t scrapeTarget) bool {
 	if !s.ignoreDepth() && t.depth >= s.maxDepth {
 		// TODO warn log when logging pkg will be added
 		return false
 	}
 
 	// only unique scans at a time
-	s.pendingMu.Lock()
-	if _, ok := s.pending[t.url]; ok {
-		s.pendingMu.Unlock()
+	s.activeMu.Lock()
+	if _, ok := s.active[t.url]; ok {
+		s.activeMu.Unlock()
 		return false
 	}
-	s.pending[t.url] = struct{}{}
-	s.pendingMu.Unlock()
+	s.active[t.url] = struct{}{}
+	s.activeMu.Unlock()
 
-	// let some of the workers from pool work on that.
-	s.jobCh <- job{
+	return true
+}
+
+func (s *Scrapper) tryQueueTarget(t scrapeTarget, callback func()) bool {
+	j := job{
 		target:   t,
 		callback: callback,
 	}
-	return true
+	select {
+	// let some of the workers from pool work on that.
+	case s.jobCh <- j:
+		return true
+	// don't block if full
+	default:
+		return false
+	}
 }
 
 func (s *Scrapper) ignoreDepth() bool {
