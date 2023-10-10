@@ -64,7 +64,7 @@ func TestExtraction(t *testing.T) {
 	t.Run("multi extractor", func(t *testing.T) {
 		wextr := NewWordsExtractor()
 		uextr := NewUrlsExtractor()
-		ExtractFromPage(string(content), []extractor{wextr, uextr})
+		ExtractFromPage(string(content), []Extractor{wextr, uextr})
 		verify(t, descr.Words, wextr.Extracted())
 		verify(t, descr.Urls, uextr.Extracted())
 	})
