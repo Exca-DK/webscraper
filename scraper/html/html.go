@@ -39,7 +39,7 @@ func ExtractWordsFromPage(page string) []string {
 	reader := getReader(page)
 	defer freeReader(reader)
 	extr := NewWordsExtractor()
-	Extract(html.NewTokenizer(reader), []extractor{extr})
+	Extract(html.NewTokenizer(reader), []Extractor{extr})
 	return extr.Extracted()
 }
 
@@ -49,12 +49,12 @@ func ExtractUrlsFromPage(page string) []string {
 	reader := getReader(page)
 	defer freeReader(reader)
 	extr := NewUrlsExtractor()
-	Extract(html.NewTokenizer(reader), []extractor{extr})
+	Extract(html.NewTokenizer(reader), []Extractor{extr})
 	return extr.Extracted()
 }
 
 // ExtractFromPage processes an HTML document as a string using a set of extractors.
-func ExtractFromPage(page string, extractors []extractor) {
+func ExtractFromPage(page string, extractors []Extractor) {
 	reader := getReader(page)
 	defer freeReader(reader)
 	Extract(html.NewTokenizer(reader), extractors)
@@ -64,7 +64,7 @@ func ExtractFromPage(page string, extractors []extractor) {
 // It iterates through the tokens in the HTML content, and for each token, it applies each extractor's
 // extraction logic. Extractors are responsible for extracting specific information or performing actions
 // based on the HTML structure.
-func Extract(tokenizer *html.Tokenizer, extractors []extractor) {
+func Extract(tokenizer *html.Tokenizer, extractors []Extractor) {
 	previous := tokenizer.Token()
 	for tokenType := tokenizer.Next(); tokenType != html.ErrorToken; tokenType = tokenizer.Next() {
 		current := tokenizer.Token()
@@ -172,7 +172,13 @@ func isValidUrl(str string) bool {
 	if uri.Scheme != "http" && uri.Scheme != "https" {
 		return false
 	}
+
+	host, _, err := net.SplitHostPort(uri.Host)
+	if err != nil {
+		host = uri.Host
+	}
+
 	// ensure that host is valid
-	_, err = net.LookupHost(uri.Host)
+	_, err = net.LookupHost(host)
 	return err == nil
 }

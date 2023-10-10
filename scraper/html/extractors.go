@@ -2,10 +2,10 @@ package html
 
 import "golang.org/x/net/html"
 
-// extractor is an interface that defines the extraction behavior for processing HTML content.
+// Extractor is an interface that defines the extraction behavior for processing HTML content.
 // Implementing types should define the 'extract' method to perform specific extraction actions
 // based on the HTML structure and tokens.
-type extractor interface {
+type Extractor interface {
 	extract(tokenizer *html.Tokenizer, previous, current html.Token)
 	Extracted() []string
 }
@@ -20,7 +20,7 @@ type wordExtractor struct {
 	extractorData
 }
 
-func NewWordsExtractor() extractor {
+func NewWordsExtractor() Extractor {
 	return &wordExtractor{
 		extractorData: extractorData{
 			extracted: make([]string, 0),
@@ -36,7 +36,7 @@ type urlsExtractor struct {
 	extractorData
 }
 
-func NewUrlsExtractor() extractor {
+func NewUrlsExtractor() Extractor {
 	return &urlsExtractor{
 		extractorData: extractorData{
 			extracted: make([]string, 0),
