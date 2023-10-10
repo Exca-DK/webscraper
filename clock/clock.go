@@ -12,7 +12,7 @@ type Clock interface {
 }
 
 var (
-	_ Clock = (Clock)(nil)
+	_ Clock = (realClock)(realClock{})
 	_ Clock = (*RewindableClock)(nil)
 )
 
