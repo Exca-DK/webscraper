@@ -172,7 +172,13 @@ func isValidUrl(str string) bool {
 	if uri.Scheme != "http" && uri.Scheme != "https" {
 		return false
 	}
+
+	host, _, err := net.SplitHostPort(uri.Host)
+	if err != nil {
+		host = uri.Host
+	}
+
 	// ensure that host is valid
-	_, err = net.LookupHost(uri.Host)
+	_, err = net.LookupHost(host)
 	return err == nil
 }

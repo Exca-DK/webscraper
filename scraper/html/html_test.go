@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path"
 	"testing"
 )
 
 func TestHrefToUrl(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	tests := []struct {
 		raw  string
 		want []string
@@ -21,6 +24,10 @@ func TestHrefToUrl(t *testing.T) {
 		{
 			raw:  "https://go.devhttp://go.dev",
 			want: []string{"https://go.dev", "http://go.dev"},
+		},
+		{
+			raw:  srv.URL,
+			want: []string{srv.URL},
 		},
 	}
 
@@ -110,7 +117,7 @@ func TestUrlValidation(t *testing.T) {
 }
 
 func writeTestData(content []byte, descr htmlTestDataDescription, dir string, name string) error {
-	if !descr.valid() {
+	if !descr.Valid() {
 		return errors.New("descr not valid")
 	}
 	descrData, err := descr.ToBytes()
@@ -166,6 +173,6 @@ func (data *htmlTestDataDescription) FromBytes(b []byte) error {
 	return json.Unmarshal(b, data)
 }
 
-func (data htmlTestDataDescription) valid() bool {
+func (data htmlTestDataDescription) Valid() bool {
 	return len(data.Source) > 0 && len(data.Words) > 0 && len(data.Urls) > 0
 }
