@@ -8,6 +8,7 @@ import (
 	"github.com/Exca-DK/webscraper/clock"
 )
 
+// expirableItem represents an item with an associated expiration time.
 type expirableItem[T any] struct {
 	V        T
 	deadline time.Time
@@ -17,12 +18,15 @@ func (i expirableItem[T]) String() string {
 	return fmt.Sprintf("(item:%v,deadline:%s)", i.V, i.deadline.Format(time.StampNano))
 }
 
+// SimpleEvictableCache is a generic cache that supports automatic eviction of items based on their expiration times.
+// It allows you to add items, mark them for eviction, and retrieve items based on their keys.
 type SimpleEvictableCache[T comparable, Y any] struct {
 	m          map[T]expirableItem[Y]
 	q          Queue[expirableItem[T]]
 	onEviction func(T, Y)
 }
 
+// NewSimpleEvictableCache creates a new instance of SimpleEvictableCache with a specified eviction callback.
 func NewSimpleEvictableCache[T comparable, Y any](onEviction func(T, Y)) *SimpleEvictableCache[T, Y] {
 	return &SimpleEvictableCache[T, Y]{
 		m:          make(map[T]expirableItem[Y]),
@@ -31,6 +35,7 @@ func NewSimpleEvictableCache[T comparable, Y any](onEviction func(T, Y)) *Simple
 	}
 }
 
+// AddIfNotSeen adds an item to the cache if it hasn't been seen before, based on the provided key.
 func (e *SimpleEvictableCache[T, Y]) AddIfNotSeen(key T, value Y, deadline time.Time) bool {
 	if _, ok := e.m[key]; ok {
 		return false
@@ -48,12 +53,14 @@ func (e *SimpleEvictableCache[T, Y]) AddIfNotSeen(key T, value Y, deadline time.
 	return true
 }
 
+// Seen checks if an item with the specified key has been seen in the cache.
 func (e *SimpleEvictableCache[T, Y]) Seen(key T) bool {
 	_, ok := e.m[key]
 	e.tryEvict()
 	return ok
 }
 
+// Evict manually triggers the eviction process for the cache, removing expired items.
 func (e *SimpleEvictableCache[T, Y]) Evict() {
 	e.tryEvict()
 }

@@ -9,11 +9,15 @@ import (
 	"github.com/Exca-DK/webscraper/scraper/html"
 )
 
+// scrapeTarget represents a target for web scraping, including a URL and the traversal depth.
+// It is used to define the specific web page to be scraped and its depth within the traversal.
 type scrapeTarget struct {
 	url   string
 	depth int
 }
 
+// scrape is responsible for performing web scraping for a given target, fetching the page content,
+// extracting data, and queuing new URLs with increased depth for further scraping. It also pipes the data into the analyzer.
 func (s *Scrapper) scrape(ctx context.Context, id uint64, target scrapeTarget) error {
 	// ctx cancelled, abort the scrape early
 	if err := ctx.Err(); err != nil {
@@ -36,6 +40,7 @@ func (s *Scrapper) scrape(ctx context.Context, id uint64, target scrapeTarget) e
 	return nil
 }
 
+// extract extracts URLs and words from a given web page content.
 func (s *Scrapper) extract(page string) (urls []string, words []string) {
 	urlExtractor, wordExtractor := html.NewUrlsExtractor(), html.NewWordsExtractor()
 	html.ExtractFromPage(page, []html.Extractor{urlExtractor, wordExtractor})
@@ -44,6 +49,7 @@ func (s *Scrapper) extract(page string) (urls []string, words []string) {
 	return
 }
 
+// queueUrls queues a list of URLs with increased depth for further scraping.
 func (s *Scrapper) queueUrls(urls []string, currentDepth int) {
 	if len(urls) == 0 {
 		return
@@ -58,6 +64,7 @@ func (s *Scrapper) queueUrls(urls []string, currentDepth int) {
 	s.requestScrapes(targets)
 }
 
+// fetchPage fetches the content of a web page.
 func fetchPage(ctx context.Context, url string, client *http.Client) (string, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {

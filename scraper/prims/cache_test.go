@@ -7,6 +7,8 @@ import (
 	"github.com/Exca-DK/webscraper/clock"
 )
 
+// TestEvictableCache tests the functionality of the SimpleEvictableCache by adding items with different
+// expiration times, evicting them in the expected order, and verifying the cache's behavior.
 func TestEvictableCache(t *testing.T) {
 	var (
 		items     = 4
