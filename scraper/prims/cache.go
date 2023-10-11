@@ -65,6 +65,11 @@ func (e *SimpleEvictableCache[T, Y]) Evict() {
 	e.tryEvict()
 }
 
+// EvictSize returns the size of evictable items.
+func (e *SimpleEvictableCache[T, Y]) EvictSize() int {
+	return len(e.q)
+}
+
 func (e *SimpleEvictableCache[T, Y]) tryEvict() {
 	for {
 		keyElem, ok := e.q.Peek()

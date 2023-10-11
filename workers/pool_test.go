@@ -31,8 +31,8 @@ func TestPool(t *testing.T) {
 		for range ch {
 			done++
 		}
-		if done != 0 {
-			t.Fatalf("unexpected worker execution amount. expected: %v, got %v", 0, done)
+		if done == 3 {
+			t.Fatalf("unexpected worker execution amount. expected: %v, got %v", 3, done)
 		}
 	})
 

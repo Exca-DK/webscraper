@@ -13,36 +13,35 @@ import (
 )
 
 // Scrapper is a web scraping tool designed to fetch, analyze, and navigate web content.
-// It provides the capability to configure the number of threads, depth of traversal, and other parameters
-// to customize the web scraping process.
+// It provides the capability to configure the number of threads
+// Scrapes are done in parallel untill the thread limit is hit
 type Scrapper struct {
 	// ctx + cancel as signal for stopping WorkPool
 	ctx    context.Context
 	cancel func()
 	done   chan struct{} // Channel for stop sig of scrapper
 
-	targetsCh chan []scrapeTarget // Channel for receving nie urls to scrape
+	targetsCh chan []scrapeTarget // Channel for receving new urls to scrape
 	jobCh     chan job            // Channel for executing scrapping
 
-	// Duration after which the scraper will rescape known websites.
-	// If not set then the scraper will visit websie only once.
+	// Duration after which the scraper can rescape known websites.
+	// If not set then the scraper will ignore already seen websites for it's whole lifetime.
 	evictionRate time.Duration
-	maxDepth     int // Max depth for url scrape
 	threads      int // How many threads for execution
 
-	jobIndex atomic.Uint64     // How many scrapes done
+	// How many scrapes done, each new scrape job increments this jobIndex
+	jobIndex atomic.Uint64
 	pool     *workers.WorkPool // Pool managing jobs
-
-	analyzer analytics.Analyzer // analyzer gathers scrape results
 
 	// jobs that are running or yet to launch
 	// required in order to not scrape two same urls concurrently
 	activeMu sync.Mutex
 	active   map[string]struct{}
+
+	wg sync.WaitGroup // running scrapper threads (eventLoop + jobs)
 }
 
-// NewScrapper creates a new Scrapper with a provided analyzer and default settings.
-func NewScrapper(analyzer analytics.Analyzer) *Scrapper {
+func NewScrapper() *Scrapper {
 	ch := make(chan workers.JobStats)
 	go func() {
 		for range ch {
@@ -55,9 +54,7 @@ func NewScrapper(analyzer analytics.Analyzer) *Scrapper {
 		done:      make(chan struct{}),
 		targetsCh: make(chan []scrapeTarget),
 		jobCh:     make(chan job),
-		maxDepth:  3,
 		pool:      workers.NewWorkPool(ch),
-		analyzer:  analyzer,
 		active:    make(map[string]struct{}),
 	}
 }
@@ -73,7 +70,9 @@ func (s *Scrapper) Start() {
 		worker := workers.NewWorker(workers.NewJob(fmt.Sprintf("scrape-%v", i), s.taskLoop))
 		// add worker
 		s.pool.AddWorker(worker)
+		s.wg.Add(1)
 	}
+	s.wg.Add(1)
 	go s.eventLoop()
 }
 
@@ -82,8 +81,9 @@ func (s *Scrapper) Stop() {
 	select {
 	case <-s.done:
 	default:
-		close(s.done)
 		s.cancel()
+		close(s.done)
+		s.wg.Wait()
 	}
 }
 
@@ -93,39 +93,38 @@ func (s *Scrapper) WithThreads(num int) *Scrapper {
 	return s
 }
 
-// WithEviction configures the eviction rate for the worker pool, determining how frequently old entries are rescaped.
+// WithEviction configures the eviction rate for the worker pool, determining how frequently old entries can be rescaped.
 // Default value of 0 means that scraper will not try to retry old entry ever.
 func (s *Scrapper) WithEviction(duration time.Duration) *Scrapper {
 	s.evictionRate = duration
 	return s
 }
 
-// WithDepth configures the maximum traversal depth for web scraping.
-func (s *Scrapper) WithDepth(depth uint) *Scrapper {
-	if depth == 0 {
-		depth++
-	}
-	s.maxDepth = int(depth)
-	return s
-}
-
 // Scrape add's url to scrapper queue.
-func (s *Scrapper) Scrape(url string) {
-	select {
-	case <-s.done:
-	case s.targetsCh <- []scrapeTarget{{url: url}}:
+func (s *Scrapper) Scrape(url string, analyzer analytics.Analyzer) {
+	s.requestScrape([]scrapeTarget{{url: url, analyzer: analyzer}})
+}
+
+// Scrape add's urls to scrapper queue. The analyzer will be called once for each of the url.
+func (s *Scrapper) ScrapeMulti(urls []string, analyzer analytics.Analyzer) {
+	targets := make([]scrapeTarget, len(urls))
+	for i, url := range urls {
+		targets[i] = scrapeTarget{
+			url:      url,
+			analyzer: analyzer,
+		}
 	}
+	s.requestScrape(targets)
 }
 
-// requestScrape initiates web scraping for a single target.
-func (s *Scrapper) requestScrape(target scrapeTarget) {
-	s.requestScrapes([]scrapeTarget{target})
-}
-
-// requestScrapes initiates web scraping for multiple targets.
-func (s *Scrapper) requestScrapes(targets []scrapeTarget) {
+// requestScrape tries to add the targets to the queue.
+func (s *Scrapper) requestScrape(targets []scrapeTarget) {
 	select {
 	case <-s.done:
+		// notify analyzer that it won't be executed if scrapper is already stopped.
+		for _, target := range targets {
+			target.analyzer.Cancel(s.ctx.Err())
+		}
 	case s.targetsCh <- targets:
 	}
 }
@@ -133,23 +132,20 @@ func (s *Scrapper) requestScrapes(targets []scrapeTarget) {
 // eventLoop is a central loop that manages the web scraping process. It handles requests, retries, and cache management
 // while coordinating with worker threads. The event loop ensures efficient, concurrent scraping of web content.
 func (s *Scrapper) eventLoop() {
+	defer s.wg.Done()
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 
 	retryQueue := make(prims.Queue[scrapeTarget], 0)
-	cache := prims.NewSimpleEvictableCache[string, int](func(url string, depth int) {
-		retryQueue.Push(scrapeTarget{
-			url:   url,
-			depth: depth,
-		})
-	})
+	cache := prims.NewSimpleEvictableCache[string, struct{}](func(_ string, _ struct{}) {})
 
 	var targets []scrapeTarget
+OUTER:
 	for {
 		select {
 		case <-s.done:
 			// scrapper stopped
-			return
+			break OUTER
 		case req := <-s.targetsCh:
 			targets = append(targets, req...)
 		case <-ticker.C:
@@ -158,9 +154,9 @@ func (s *Scrapper) eventLoop() {
 				targets = append(targets, target)
 			}
 		}
+
 		for _, target := range targets {
 			// if already in cache, ignore.
-			// the loop will receive notification automatically when it expires
 			if cache.Seen(target.url) {
 				continue
 			}
@@ -174,6 +170,7 @@ func (s *Scrapper) eventLoop() {
 				delete(s.active, target.url)
 				s.activeMu.Unlock()
 			}) {
+
 				// add to retry and remove from active on failure
 				retryQueue.Push(target)
 				s.activeMu.Lock()
@@ -187,21 +184,24 @@ func (s *Scrapper) eventLoop() {
 			if s.evictionRate != 0 {
 				deadline = time.Now().Add(s.evictionRate)
 			}
-			cache.AddIfNotSeen(target.url, target.depth, deadline)
+			cache.AddIfNotSeen(target.url, struct{}{}, deadline)
 		}
 		// clear
 		targets = targets[len(targets):]
 	}
-}
 
-// canQueueTarget checks if a given scrape target can be added to the scraping process. It considers factors like
-// the maximum traversal depth and whether the target is already in progress or not.
-func (s *Scrapper) canQueueTarget(t scrapeTarget) bool {
-	if !s.ignoreDepth() && t.depth >= s.maxDepth {
-		// TODO warn log when logging pkg will be added
-		return false
+	// cleanup all of the pending analyzers
+	for _, target := range targets {
+		target.analyzer.Cancel(s.ctx.Err())
 	}
 
+	for _, target := range retryQueue {
+		target.analyzer.Cancel(s.ctx.Err())
+	}
+}
+
+// canQueueTarget checks if a given scrape target can be added to the scraping process.
+func (s *Scrapper) canQueueTarget(t scrapeTarget) bool {
 	// only unique scans at a time
 	s.activeMu.Lock()
 	if _, ok := s.active[t.url]; ok {
@@ -228,10 +228,4 @@ func (s *Scrapper) tryQueueTarget(t scrapeTarget, callback func()) bool {
 	default:
 		return false
 	}
-}
-
-// ignoreDepth checks if the scraping process should ignore depth limits. If the maximum depth is set to -1,
-// the scraper will ignore depth limitations and scrape without restrictions.
-func (s *Scrapper) ignoreDepth() bool {
-	return s.maxDepth == -1
 }

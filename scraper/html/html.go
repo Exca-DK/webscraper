@@ -93,6 +93,23 @@ func extractWords(previous html.Token, current html.Token) []string {
 	return splitSentence(sentence)
 }
 
+// extractSentences extracts sentences from an HTML document using an HTML tokenizer.
+// It iterates through the tokens in the HTML content and extracts sentences from text content.
+func extractSentences(previous html.Token, current html.Token) []string {
+	if previous.Data == script || previous.Data == css {
+		return nil
+	}
+	if current.Type != html.TextToken {
+		return nil
+	}
+
+	sentence := strings.TrimSpace(html.UnescapeString(current.Data))
+	if len(sentence) == 0 {
+		return nil
+	}
+	return []string{sentence}
+}
+
 func splitSentence(sentence string) []string {
 	tmp := strings.Fields(sentence)
 	result := make([]string, 0, len(tmp))
