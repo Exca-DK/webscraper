@@ -113,7 +113,7 @@ func TestScrape(t *testing.T) {
 		t.Run("single threads", func(t *testing.T) {
 			analyzer := &testingSingleAnalyzer{}
 			analyzer.wg.Add(6)
-			scrapper := NewScrapper().WithThreads(1)
+			scrapper := NewScrapper(nil).WithThreads(1)
 
 			scrapper.Start()
 			ts := time.Now()
@@ -126,7 +126,7 @@ func TestScrape(t *testing.T) {
 		t.Run("half threads", func(t *testing.T) {
 			analyzer := &testingSingleAnalyzer{}
 			analyzer.wg.Add(6)
-			scrapper := NewScrapper().WithThreads(3)
+			scrapper := NewScrapper(nil).WithThreads(3)
 
 			scrapper.Start()
 			ts := time.Now()
@@ -144,7 +144,7 @@ func TestScrape(t *testing.T) {
 		t.Run("full threads", func(t *testing.T) {
 			analyzer := &testingSingleAnalyzer{}
 			analyzer.wg.Add(6)
-			scrapper := NewScrapper().WithThreads(6)
+			scrapper := NewScrapper(nil).WithThreads(6)
 
 			scrapper.Start()
 			ts := time.Now()
@@ -173,7 +173,7 @@ func TestScrape(t *testing.T) {
 			}
 		}
 
-		scrapper := NewScrapper().WithThreads(1)
+		scrapper := NewScrapper(nil).WithThreads(1)
 		called := 0
 		ch := make(chan struct{}, 6)
 		analyzer := &testingCallbackAnalyzer{callback: func() {
@@ -190,7 +190,7 @@ func TestScrape(t *testing.T) {
 	})
 
 	t.Run("Cancellation", func(t *testing.T) {
-		scrapper := NewScrapper().WithThreads(1)
+		scrapper := NewScrapper(nil).WithThreads(1)
 		var wg sync.WaitGroup
 		wg.Add(1024)
 		analyzer := &testingCallbackAnalyzer{callback: func() { wg.Done() }}
