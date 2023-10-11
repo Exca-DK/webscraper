@@ -2,7 +2,6 @@ package scraper
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 
@@ -26,9 +25,9 @@ func (s *Scrapper) scrape(ctx context.Context, id uint64, target scrapeTarget) e
 	page, err := fetchPage(ctx, target.url, http.DefaultClient)
 	if err != nil {
 		target.analyzer.Cancel(err)
-		fmt.Println("failed fetching page", "url", target.url, "err", err.Error())
 		return err
 	}
+	s.logger.Debug("fetched page", "jobId", id, "url", target.url, "size", len(page))
 	target.analyzer.Analyze(page)
 	return nil
 }

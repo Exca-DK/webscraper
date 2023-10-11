@@ -22,7 +22,10 @@ func (s *Scrapper) taskLoop(ctx context.Context, id string) error {
 			return nil
 		case j := <-s.jobCh:
 			currentIndex := s.jobIndex.Add(1) - 1
-			s.scrape(ctx, currentIndex, j.target)
+			err := s.scrape(ctx, currentIndex, j.target)
+			if err != nil {
+				s.logger.Warn("failed fetching page", "worker:", id, "jobIndex:", currentIndex, "url:", j.target.url, "err:", err.Error())
+			}
 			j.callback()
 		}
 	}

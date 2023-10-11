@@ -3,10 +3,12 @@ package scraper
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/Exca-DK/webscraper/log"
 	"github.com/Exca-DK/webscraper/scraper/analytics"
 	"github.com/Exca-DK/webscraper/scraper/prims"
 	"github.com/Exca-DK/webscraper/workers"
@@ -39,9 +41,14 @@ type Scrapper struct {
 	active   map[string]struct{}
 
 	wg sync.WaitGroup // running scrapper threads (eventLoop + jobs)
+
+	logger log.Logger
 }
 
-func NewScrapper() *Scrapper {
+func NewScrapper(logger log.Logger) *Scrapper {
+	if logger == nil {
+		logger = log.NewLogger(log.Info, os.Stdout)
+	}
 	ch := make(chan workers.JobStats)
 	go func() {
 		for range ch {
@@ -56,6 +63,7 @@ func NewScrapper() *Scrapper {
 		jobCh:     make(chan job),
 		pool:      workers.NewWorkPool(ch),
 		active:    make(map[string]struct{}),
+		logger:    logger,
 	}
 }
 
@@ -67,6 +75,7 @@ func (s *Scrapper) Start() {
 	s.pool.Start(s.ctx)
 	for i := 0; i < s.threads; i++ {
 		// create a worker that pulls new tasks all the time
+		s.logger.Debug("adding new worker")
 		worker := workers.NewWorker(workers.NewJob(fmt.Sprintf("scrape-%v", i), s.taskLoop))
 		// add worker
 		s.pool.AddWorker(worker)
@@ -147,6 +156,7 @@ OUTER:
 			// scrapper stopped
 			break OUTER
 		case req := <-s.targetsCh:
+			s.logger.Debug("added new targets", "targets:", len(req))
 			targets = append(targets, req...)
 		case <-ticker.C:
 			// try to add elems from failed queue

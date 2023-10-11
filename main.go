@@ -3,28 +3,38 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/Exca-DK/webscraper/log"
 	"github.com/Exca-DK/webscraper/scraper"
 	"github.com/Exca-DK/webscraper/scraper/analytics"
 )
 
 var (
 	threadsFlag = flag.Int("threads", 1, "specifies how many threads the scraper should utilize for scrapping content.")
-	urls        = flag.String("urls", "", "Comma separated list of urls to scrape, eg. --urls=https://www.golang-book.com/books/intro/1,https://www.golang-book.com/books/intro/2")
+	urlsFlag    = flag.String("urls", "", "Comma separated list of urls to scrape, eg. --urls=https://www.golang-book.com/books/intro/1,https://www.golang-book.com/books/intro/2")
+	lvlFlag     = flag.String("verbosity", log.Info.String(), fmt.Sprintf("specifies the logger output lvl. possible options are: %v", log.Lvls()))
 )
 
 func main() {
 	flag.Parse()
-	urls := strings.Split(*urls, ",")
+	var logLvl log.LogLvl
+	if err := logLvl.FromString(*lvlFlag); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	logger := log.NewLogger(logLvl, os.Stdout)
+
+	urls := strings.Split(*urlsFlag, ",")
 	threads := *threadsFlag
 	if threads < 1 {
 		threads = 1
 	}
-	fmt.Printf("Scrapping with %v threads for %v links\n", threads, urls)
-	scrapper := scraper.NewScrapper().WithThreads(threads)
+	logger.Info("Initializing scrapper.", "threads:", threads, "urls:", urls)
+	scrapper := scraper.NewScrapper(nil).WithThreads(threads)
 	scrapper.Start()
 	defer scrapper.Stop()
 
@@ -43,13 +53,13 @@ func main() {
 		go func() {
 			result, err := analyzer.Result()
 			if err != nil {
-				fmt.Printf("Scrape failed. Url: %s, Error: %v\n", url, err.Error())
+				logger.Warn("Scrape failed.", "url:", url, "err:", err.Error())
 			} else {
-				fmt.Printf("Scrape finished. Url: %s, Result: %v\n", url, result)
+				logger.Info("Scrape finished.", "url:", url, "result:", result)
 			}
 			wg.Done()
 		}()
 	}
 	wg.Wait()
-	fmt.Printf("Scraping finished. Elapsed: %v\n", time.Since(ts))
+	logger.Info("Scraping finished.", "duration:", time.Since(ts))
 }
