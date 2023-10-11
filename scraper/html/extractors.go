@@ -47,3 +47,19 @@ func NewUrlsExtractor() Extractor {
 func (w *urlsExtractor) extract(tokenizer *html.Tokenizer, previous, current html.Token) {
 	w.extracted = append(w.extracted, extractUrlsFromToken(current)...)
 }
+
+type sentenceExtractor struct {
+	extractorData
+}
+
+func NewSentenceExtractor() Extractor {
+	return &sentenceExtractor{
+		extractorData: extractorData{
+			extracted: make([]string, 0),
+		},
+	}
+}
+
+func (w *sentenceExtractor) extract(tokenizer *html.Tokenizer, previous, current html.Token) {
+	w.extracted = append(w.extracted, extractUrlsFromToken(current)...)
+}

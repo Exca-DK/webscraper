@@ -1,6 +1,8 @@
 package scraper
 
-import "context"
+import (
+	"context"
+)
 
 // job represents a web scraping task with a target and a callback function.
 // It encapsulates the information required for a single scraping operation,
@@ -12,17 +14,15 @@ type job struct {
 
 // taskLoop is responsible for managing web scraping tasks within a worker thread.
 // It continuously waits for and processes scraping jobs by fetching and analyzing web pages.
-func (s *Scrapper) taskLoop(ctx context.Context, _ string) error {
+func (s *Scrapper) taskLoop(ctx context.Context, id string) error {
+	defer s.wg.Done()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case j := <-s.jobCh:
 			currentIndex := s.jobIndex.Add(1) - 1
-			err := s.scrape(ctx, currentIndex, j.target)
-			if err != nil {
-				// TODO log when added logging package
-			}
+			s.scrape(ctx, currentIndex, j.target)
 			j.callback()
 		}
 	}

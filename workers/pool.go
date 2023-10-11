@@ -30,6 +30,8 @@ type WorkPool struct {
 
 	mu      sync.Mutex // mutex protecting workers
 	workers []Worker   // workers
+
+	wg sync.WaitGroup
 }
 
 // NewWorkPool creates and initializes a new WorkPool instance.
@@ -54,18 +56,7 @@ func (p *WorkPool) Start(ctx context.Context) {
 	if p.target == 0 {
 		p.target = 1
 	}
-	go p.start(ctx)
 	go p.monitor(ctx)
-}
-
-func (p *WorkPool) start(ctx context.Context) {
-	// spawn allocated workers
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	for _, worker := range p.workers {
-		p.spawnWorker(ctx, worker)
-	}
-	p.workers = p.workers[:0]
 }
 
 func (p *WorkPool) spawnWorker(ctx context.Context, worker Worker) {
@@ -75,6 +66,7 @@ func (p *WorkPool) spawnWorker(ctx context.Context, worker Worker) {
 		atomic.AddUint32(&p.activeWorkers, ^uint32(0))
 		atomic.AddUint32(&p.finishedWorkers, 1)
 		p.workersFeed <- result
+		p.wg.Done()
 	}()
 }
 
@@ -108,14 +100,16 @@ func (p *WorkPool) monitor(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			close(p.done)
+			p.wg.Wait()
 			close(p.workersFeed)
 			return
 		case w := <-p.workersIn:
+			p.wg.Add(1)
 			p.addWorker(w)
 		case <-workerTicker.C:
 			for p.PendingWorkers() != 0 {
 				active := atomic.LoadUint32(&p.activeWorkers)
-				if active == p.target {
+				if active >= p.target {
 					break
 				}
 				p.spawnWorker(ctx, p.popWorker())
