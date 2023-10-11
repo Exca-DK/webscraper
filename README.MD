@@ -1,4 +1,4 @@
-# WEBSCRAPER Example
+# WEBSCRAPER
 
 This is a simple example of a web scraper implemented using Golang, with zero external dependencies. This repository serves as a basic demonstration of how to create a web scraper to extract web content using the Golang standard library.
 
