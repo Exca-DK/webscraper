@@ -43,7 +43,7 @@ To get started with this example, follow these steps:
     ```bash
     go run main.go --urls=URL1,URL2
     go run main.go --urls=URL1,URL2 --threads=32
-    go run main.go --urls=URL1,URL2 --threads=32 -verbosity=INFO
+    go run main.go --urls=URL1,URL2 --threads=32 --verbosity=INFO
     ```
 
 ## Features

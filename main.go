@@ -34,7 +34,7 @@ func main() {
 		threads = 1
 	}
 	logger.Info("Initializing scrapper.", "threads:", threads, "urls:", urls)
-	scrapper := scraper.NewScrapper(nil).WithThreads(threads)
+	scrapper := scraper.NewScrapper(logger).WithThreads(threads)
 	scrapper.Start()
 	defer scrapper.Stop()
 
